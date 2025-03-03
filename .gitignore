@@ -1,0 +1,66 @@
+# ==============================
+# General OS and Editor Files
+# ==============================
+.DS_Store
+Thumbs.db
+*.log
+*.swp
+*.swo
+*.swn
+.vscode/
+.idea/
+*.bak
+
+# ==============================
+# Python (FastAPI Backend)
+# ==============================
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+*.sqlite3
+instance/
+
+# ==============================
+# Node.js (Frontend)
+# ==============================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+dist/
+.cache/
+.eslintcache
+
+# ==============================
+# Solidity (Blockchain Smart Contracts)
+# ==============================
+*.sol
+artifacts/
+cache/
+typechain/
+coverage/
+hardhat.config.ts
+hardhat.config.js
+
+# ==============================
+# Ignore API keys and sensitive credentials
+# ==============================
+.env
+.env.local
+.env.production
+.env.development
+.env.test
+.env.*.local
+
+# ==============================
+# Ignore build files and dependencies
+# ==============================
+build/
+dist/
+coverage/
+out/
+debug.log
