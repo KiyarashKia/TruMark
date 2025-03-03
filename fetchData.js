@@ -13,10 +13,11 @@ async function main() {
     const product = await contract.product();
     const creator = await contract.creator();
     const date = await contract.date();
+    
 
     // Format the data
     const data = `
-    Contract Data:
+    Contract Data: ${contractAddress}
     ---------------------
     Name: ${name}
     Product: ${product}

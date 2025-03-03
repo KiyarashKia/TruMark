@@ -6,7 +6,7 @@ async function main() {
 
     // Contract details
     const name = "TruMark";
-    const product = "Milk";
+    const product = "Hello World";
     const creator = "Kiarash - Upayan";
     const date = "3/2/2025";
 
