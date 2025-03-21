@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, VStack, Text, Image, Button } from "@chakra-ui/react";
+import { AnimatePresence, motion } from "framer-motion";
+
 
 // Onboarding Screens Data
 const onboardingData = [
@@ -16,7 +18,7 @@ const onboardingData = [
         transparency
       </>
     ),
-    boxBg: "#D1E8FF",
+    boxBg: "#A7C7FC",
     buttonText: "Next",
     buttonColor: "#1C1C1C",
   },
@@ -114,29 +116,39 @@ const Onboarding = () => {
     </Box>
 
       {/* Image (Spacing Independent) */}
-      <Image
-        src={onboardingData[step].image}
-        alt="Onboarding Step"
-        width="250px"
-        height="250px"
-        objectFit="contain"
-        mt="16px"
-        zIndex={2}
-      />
+      <motion.img
+      key={onboardingData[step].image}
+      src={onboardingData[step].image}
+      alt="Onboarding Step"
+      style={{
+        width: "260px",
+        height: "260px",
+        objectFit: "contain",
+        marginTop: "16px",
+        zIndex: 2,
+      }}
+      initial={{ opacity: 0, scale: 0.7 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{
+        duration: 0.8,
+        delay: 0.1,
+        ease: [0, 0.71, 0.2, 1.01]}}
+    />
 
       {/* Description (With Bold & Colored Text) */}
+      <Box h="96px" display="flex" alignItems="center" justifyContent="center" mt={16}>
       <Text
         fontSize="16px"
         fontFamily="SF UI Text"
         fontWeight="medium"
         color="#1C1C1E"
         px={16}
-        mt="64px"
         textAlign="center"
         zIndex={2}
       >
         {onboardingData[step].description}
       </Text>
+    </Box>
 
       {/* Button (Always Visible & Independent) */}
       <Button
