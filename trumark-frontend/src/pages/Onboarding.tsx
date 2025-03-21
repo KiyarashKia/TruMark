@@ -127,13 +127,13 @@ const Onboarding = () => {
         marginTop: "16px",
         zIndex: 2,
       }}
-      initial={{ opacity: 0, scale: 0.7 }}
+      initial={{ opacity: 0, scale: 0.5 }}
       animate={{ opacity: 1, scale: 1 }}
       transition={{
-        duration: 0.8,
-        delay: 0.1,
-        ease: [0, 0.71, 0.2, 1.01]}}
-    />
+          duration: 0.3,
+          scale: { type: "spring", visualDuration: 0.4, bounce: 0.2 },
+      }}
+  />
 
       {/* Description (With Bold & Colored Text) */}
       <Box h="96px" display="flex" alignItems="center" justifyContent="center" mt={16}>
