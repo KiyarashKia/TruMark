@@ -77,7 +77,7 @@ const Onboarding = () => {
     <Box
       w="100vw"
       h="100vh"
-      minH="820px"
+      minH="805px"
       position="relative"
       bg="white"
       display="flex"
