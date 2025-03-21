@@ -49,6 +49,8 @@ body {
   
   /* 🌟 iOS Button Shadow */
   box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.16);
+  transform: scale(calc(100vw / 414)); /* Scale based on iPhone 15 Pro Max width */
+  transform-origin: center; /* Scale from the center */
 }
 
 /* Hover & Active States */
@@ -80,5 +82,16 @@ body {
 @media (min-width: 1025px) {
   body {
     display: none;
+  }
+}
+
+/* Disable vertical responsiveness for height under 810px */
+@media (max-height: 810px) { 
+  .onboarding-container {
+    transform: scale(1); /* Ensure no vertical (or overall) scaling is applied */
+  }
+  /* Optionally, adjust buttons to only scale horizontally */
+  .button {
+    transform: scaleX(calc(100vw / 414));
   }
 }

@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, VStack, Text, Image, Button } from "@chakra-ui/react";
-import { AnimatePresence, motion } from "framer-motion";
-
+import { Box, Text, Button } from "@chakra-ui/react";
+import { motion } from "framer-motion";
 
 // Onboarding Screens Data
 const onboardingData = [
@@ -64,7 +63,6 @@ const onboardingData = [
 
 const Onboarding = () => {
   const [step, setStep] = useState(0);
-  const [_, setForceUpdate] = useState(false);
   const navigate = useNavigate();
 
   const nextStep = () => {
@@ -73,23 +71,20 @@ const Onboarding = () => {
     } else {
       navigate("/scanner");
     }
-    setForceUpdate((prev) => !prev); // Forces the layout to update
   };
 
   return (
     <Box
       w="100vw"
       h="100vh"
+      minH="820px"
       position="relative"
       bg="white"
       display="flex"
       flexDirection="column"
       alignItems="center"
       justifyContent="space-between"
-      style={{
-        paddingTop: "env(safe-area-inset-top)", // Ensures spacing for iPhone notch
-        paddingBottom: "env(safe-area-inset-bottom)", // Fixes bottom spacing
-      }}
+      className="onboarding-container"
     >
       {/* Curved Background Shape */}
       <Box
@@ -168,6 +163,7 @@ const Onboarding = () => {
         mb="max(172px, env(safe-area-inset-bottom))"
         zIndex={2}
         onClick={nextStep}
+        className="onboarding-button"
       >
         {onboardingData[step].buttonText}
       </Button>
