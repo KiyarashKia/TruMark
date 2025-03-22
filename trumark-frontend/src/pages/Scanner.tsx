@@ -85,6 +85,7 @@ const Scanner = () => {
 
       let lastScanned = "";
 
+      // Duplicating Scans are allowed. Also after detecting a barcode, the scanner should stop, unless user taps rescan.
       Quagga.onDetected((data) => {
         const code = data?.codeResult?.code;
         if (code && code !== lastScanned) {
