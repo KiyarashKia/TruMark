@@ -22,7 +22,41 @@ const theme = extendTheme({
     white: "#FFFFFF",
     progressBg: "#E5E5EA",
     progressFill: "#000000",
+    scanner: {
+      overlay: "rgba(0, 0, 0, 0.45)",
+      buttonBg: "rgba(255, 255, 255, 0.15)",
+      buttonHover: "rgba(255, 255, 255, 0.2)",
+      flashlightActive: "#C4A938",
+      flashlightHover: "#B59B33",
+      scanLine: "red.500"
+    }
   },
+  components: {
+    IconButton: {
+      baseStyle: {
+        borderRadius: "full",
+      },
+      variants: {
+        scanner: {
+          bg: "scanner.buttonBg",
+          color: "white",
+          _hover: {
+            bg: "scanner.buttonHover"
+          },
+          _active: {
+            transform: "scale(0.95)"
+          }
+        },
+        flashlight: (props: { isActive: boolean }) => ({
+          bg: props.isActive ? "scanner.flashlightActive" : "scanner.buttonBg",
+          color: props.isActive ? "black" : "white",
+          _hover: {
+            bg: props.isActive ? "scanner.flashlightHover" : "scanner.buttonHover"
+          }
+        })
+      }
+    }
+  }
 });
 
 export default theme;

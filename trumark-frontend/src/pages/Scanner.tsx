@@ -3,6 +3,37 @@ import { Box, Button, Text, IconButton } from "@chakra-ui/react";
 import * as Quagga from "quagga";
 import { AiOutlineUpload, AiOutlineThunderbolt, AiOutlineHistory } from "react-icons/ai";
 
+// Minimal interface for ImageCapture to fix the error
+interface PhotoCapabilities {
+  imageHeight: number;
+  imageWidth: number;
+  fillLightMode: string[];
+  redEyeReduction: boolean;
+  torch: boolean;
+  exposureCompensation: {
+    min: number;
+    max: number;
+    step: number;
+  };
+}
+
+interface ImageCapture {
+  getPhotoCapabilities(): Promise<PhotoCapabilities>;
+}
+
+declare global {
+  interface Window {
+    ImageCapture: {
+      new (track: MediaStreamTrack): ImageCapture;
+    };
+  }
+}
+
+// Declare a TorchConstraint interface locally
+interface TorchConstraint extends MediaTrackConstraintSet {
+  torch?: boolean;
+}
+
 const SCAN_WIDTH = 340;
 const SCAN_HEIGHT = 210;
 
@@ -13,56 +44,60 @@ const Scanner = () => {
   const [showAlert, setShowAlert] = useState(false);
 
   useEffect(() => {
-    Quagga.init(
-      {
-        inputStream: {
-          name: "Live",
-          type: "LiveStream",
-          target: document.querySelector("#scanner-container") as HTMLElement,
-          constraints: {
-            facingMode: "environment",
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+    const initQuagga = () => {
+      Quagga.init(
+        {
+          inputStream: {
+            name: "Live",
+            type: "LiveStream",
+            target: document.querySelector("#scanner-container") as HTMLElement,
+            constraints: {
+              facingMode: "environment",
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
           },
+          decoder: {
+            readers: [
+              "ean_reader",
+              "ean_8_reader",
+              "upc_reader",
+              "upc_e_reader",
+              "code_128_reader",
+            ],
+          },
+          // Performance/accuracy enhancements:
+          locate: true,
+          frequency: 5,
+          numOfWorkers: 2,
+          halfSample: false,
+          patchSize: "medium",
         },
-        decoder: {
-          readers: [
-            "ean_reader",
-            "ean_8_reader",
-            "upc_reader",
-            "upc_e_reader",
-            "code_128_reader",
-          ],
-        },
-        // Performance/accuracy enhancements:
-        locate: true,
-        frequency: 5,
-        numOfWorkers: 2,
-        halfSample: false,
-        patchSize: "medium",
-      },
-      (err) => {
-        if (err) {
-          console.error("Quagga init failed:", err);
-          return;
+        (err) => {
+          if (err) {
+            console.error("Quagga init failed:", err);
+            return;
+          }
+          console.log("Quagga initialized");
+          Quagga.start();
         }
-        console.log("Quagga initialized");
-        Quagga.start();
-      }
-    );
+      );
 
-    let lastScanned = "";
+      let lastScanned = "";
 
-    Quagga.onDetected((data) => {
-      const code = data?.codeResult?.code;
-      if (code && code !== lastScanned) {
-        lastScanned = code;
-        setScannedResult(code);
-        setHistory((prev) => [...prev, code]);
-        console.log("Barcode scanned:", code);
-        setShowAlert(true);
-      }
-    });
+      Quagga.onDetected((data) => {
+        const code = data?.codeResult?.code;
+        if (code && code !== lastScanned) {
+          lastScanned = code;
+          setScannedResult(code);
+          setHistory((prev) => [...prev, code]);
+          console.log("Barcode scanned:", code);
+          setShowAlert(true);
+        }
+      });
+    };
+
+    initQuagga();
 
     return () => {
       Quagga.offDetected(() => {});
@@ -108,6 +143,39 @@ const Scanner = () => {
     reader.readAsDataURL(file);
   };
 
+  const toggleFlashlight = async () => {
+    try {
+      // Get the video element created by Quagga.
+      const videoElement = document.querySelector("#scanner-container video") as HTMLVideoElement;
+      if (videoElement && videoElement.srcObject) {
+        const mediaStream = videoElement.srcObject as MediaStream;
+        const track = mediaStream.getVideoTracks()[0];
+        // Check if torch is supported
+        const capabilities = track.getCapabilities();
+        if (!("torch" in capabilities)) {
+          console.warn("Torch is not supported on this device.");
+          return;
+        }
+        const newTorchState = !flashlight;
+        try {
+          await track.applyConstraints({
+            advanced: [{ torch: newTorchState }] as TorchConstraint[],
+          });
+          setFlashlight(newTorchState);
+        } catch (error) {
+          console.error("Failed to toggle torch:", error);
+          // Reset flashlight state if constraint application fails.
+          setFlashlight(false);
+        }
+      } else {
+        console.error("No video element or stream available for flashlight toggle");
+      }
+    } catch (err) {
+      console.error("Error toggling flashlight:", err);
+      setFlashlight(false);
+    }
+  };
+  
   return (
     <Box position="relative" w="100vw" h="100vh" bg="black" overflow="hidden">
       {/* Camera feed */}
@@ -190,7 +258,7 @@ const Scanner = () => {
         w="full"
         position="absolute"
         top="160px"
-        zIndex={3}
+        zIndex={4}
         display="flex"
         justifyContent="space-between"
         px="30px"
@@ -206,10 +274,14 @@ const Scanner = () => {
         <IconButton
           aria-label="Toggle Flashlight"
           icon={<AiOutlineThunderbolt />}
-          onClick={() => setFlashlight(!flashlight)}
-          bg="rgba(255,255,255,0.15)"
-          color="white"
+          onClick={toggleFlashlight}
+          bg={flashlight ? "#C4A938" : "rgba(255,255,255,0.15)"}
+          color={flashlight ? "black" : "white"}
           borderRadius="full"
+          transition="all 0.2s"
+          _hover={{
+            bg: flashlight ? "#B59B33" : "rgba(255,255,255,0.2)",
+          }}
         />
       </Box>
 
