@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Storage | TruMark SC</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <style>
+    body { background-color: #121212; color: #fff; }
+    .form-control {
+      background-color: #1e1e1e;
+      border: 1px solid #444;
+      color: #fff;
+    }
+  </style>
+</head>
+<body class="py-5">
+  <div class="container">
+    <a href="/modules" class="text-decoration-none"> <button type="button" class="btn mt-3 btn-warning">Home</button></a>
+    <h2 class="mb-4 fw-bold text-center">🏬 Storage Entry</h2>
+    <form method="POST" action="/submit_storage">
+      <div class="mb-3">
+        <label class="form-label">UPC</label>
+        <input type="text" class="form-control" name="upc" placeholder="Enter UPC code" required/>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">LOT / Batch (FK)</label>
+        <input type="text" class="form-control" name="lot" placeholder="Enter batch number" required/>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Storage Standards</label>
+        <textarea class="form-control" name="storage_standard" rows="3" placeholder="Standard protocols..." required></textarea>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Date</label>
+        <input type="date" class="form-control" name="date" required/>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Temperature (°C)</label>
+        <input type="number" step="0.1" class="form-control" name="temperature" placeholder="e.g., 4.5 °C" required/>
+      </div>
+      <div class="mb-4">
+        <label class="form-label">Signature</label>
+        <input type="text" class="form-control" name="signature" placeholder="Authorized person" style="width: 25%;" required/>
+      </div>
+      <button type="submit" class="btn btn-warning w-100">Submit</button>
+    </form>
+  </div>
+</body>
+</html>
