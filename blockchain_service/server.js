@@ -1,15 +1,15 @@
 require('dotenv').config();
 const express = require('express');
 const bodyParser = require('body-parser');
-const { ethers } = require('ethers');
+const ethers = require('ethers');
 
 // Simulation toggle
-const SIMULATE = process.env.SIMULATE === "true";
+const SIMULATE = process.env.SIMULATE === "false";
 
 // Load ABI + Bytecode only if needed
 let truMarkArtifact;
 if (!SIMULATE) {
-  truMarkArtifact = require('./artifacts/contracts/TruMark.sol/TruMark.json');
+  truMarkArtifact = require('../artifacts/contracts/TruMark.sol/TruMark.json');
 }
 
 const app = express();
@@ -20,7 +20,7 @@ const port = process.env.PORT || 3001;
 // load provider + wallet if not simulating
 let provider, wallet, factory;
 if (!SIMULATE) {
-  provider = new ethers.providers.JsonRpcProvider(process.env.ALCHEMY_API_URL);
+  provider = new ethers.JsonRpcProvider(process.env.ALCHEMY_API_URL);
   wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
 }
 
@@ -47,7 +47,6 @@ app.post('/blockchain/register', async (req, res) => {
 
     return res.json({
       success: res.statusCode === 200 ? "Success" : "Failure",
-      success: res.statusCode === 200 ? "Success" : "Failure",
       contractAddress: "0xDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
       transactionHash: "0xFAKETXNFAKETXNFAKETXNFAKETXNFAKETXNFAKETXN"
     });
@@ -61,16 +60,55 @@ app.post('/blockchain/register', async (req, res) => {
       wallet
     );
 
-    const contract = await factory.deploy(contractName, productType, creator, date);
-    console.log("🚀 Deploying... TX:", contract.deployTransaction.hash);
+    // Deploy contract with 6 arguments matching TruMark.sol
+    const contract = await factory.deploy(
+      product.role || "Unknown Role",
+      product.upc || "",
+      product.lot || "",
+      productType,
+      date,
+      creator
+    );
+    console.log("🚀 Deploying... TX:", contract.deploymentTransaction().hash);
 
-    await contract.deployed();
-    console.log("✅ Contract deployed at:", contract.address);
+    await contract.waitForDeployment();
+    const contractAddress = await contract.getAddress();
+    console.log("✅ Contract deployed at:", contractAddress);
+
+    // Attempt verification using Hardhat CLI as a child process (spawn, not exec)
+    try {
+      // Wait for the contract to be indexed by the explorer
+      await new Promise(resolve => setTimeout(resolve, 60000)); // 60 seconds
+      const { spawn } = require("child_process");
+      const args = [
+        "verify",
+        "--network", "amoy",
+        contractAddress,
+        product.role || "Unknown Role",
+        product.upc || "",
+        product.lot || "",
+        productType,
+        date,
+        creator
+      ];
+      const child = spawn("npx", ["hardhat", ...args], { cwd: process.cwd(), shell: true });
+      child.stdout.on("data", data => console.log(data.toString()));
+      child.stderr.on("data", data => console.error(data.toString()));
+      child.on("close", code => {
+        if (code === 0) {
+          console.log("🎉 Contract verified on explorer!");
+        } else {
+          console.error("❌ Verification failed with exit code", code);
+        }
+      });
+    } catch (verifyErr) {
+      console.error("❌ Verification process error:", verifyErr.message || verifyErr);
+    }
 
     res.json({
       success: true,
-      contractAddress: contract.address,
-      transactionHash: contract.deployTransaction.hash
+      contractAddress: contractAddress,
+      transactionHash: contract.deploymentTransaction().hash
     });
   } catch (err) {
     console.error("❌ Error during deployment:", err.message);

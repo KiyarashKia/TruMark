@@ -1,8 +1,7 @@
 from flask import Flask, request, render_template, redirect, url_for, flash
 from pymongo.mongo_client import MongoClient
 from pymongo.server_api import ServerApi
-import subprocess
-import sys
+import requests
 
 # ---------------------------
 # MongoDB Atlas Connection
@@ -37,18 +36,23 @@ users = {
 # Replace this with your actual blockchain interaction
 
 def deploy_to_blockchain(data):
-    # Call deploy.js using subprocess and capture output
+    # Call the blockchain microservice REST API
     try:
-        result = subprocess.run(
-            ['node', '../scripts/deploy.js'],
-            capture_output=True, text=True, check=True
+        response = requests.post(
+            "http://localhost:3001/blockchain/register",
+            json=data,
+            timeout=60
         )
-        # Parse the contract address from the output
-        for line in result.stdout.splitlines():
-            if "Contract deployed to:" in line:
-                return line.split("Contract deployed to:")[-1].strip()
-        # If not found, raise error
-        raise Exception("Contract address not found in deploy.js output")
+        if response.status_code == 200:
+            result = response.json()
+            if result.get("success") and result.get("contractAddress"):
+                return result["contractAddress"]
+            else:
+                print(f"Blockchain error: {result.get('error', 'Unknown error')}")
+                return None
+        else:
+            print(f"Blockchain service returned status {response.status_code}")
+            return None
     except Exception as e:
         print(f"Blockchain deployment failed: {e}")
         return None
@@ -125,11 +129,14 @@ def submit_farmer():
     }
     # Send to blockchain and get contract address/hash
     contract_hash = deploy_to_blockchain(data)
+    if not contract_hash:
+        flash("Error: Blockchain deployment failed. Data was NOT saved.", "danger")
+        return redirect(url_for("farmer"))
     # Add hash to the object
     data["hash"] = contract_hash
     # Insert into MongoDB
     collection.insert_one(data)
-    flash("Farmer data submitted and stored on blockchain successfully!")
+    flash("Farmer data submitted and stored on blockchain successfully!", "success")
     return redirect(url_for("farmer"))
 
 # Handle storage form submission

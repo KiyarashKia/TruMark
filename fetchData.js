@@ -3,7 +3,7 @@ const fs = require("fs");
 
 async function main() {
     // Define contract address
-    const contractAddress = "0x90C2538309190d1E50a7FA3f43A9b5702820B421"; 
+    const contractAddress = "0x5C1b8ab1bB0DA255d9D01603D3cDea3edBbdB1E5"; 
 
     // Get the deployed contract
     const contract = await ethers.getContractAt("TruMark", contractAddress);
