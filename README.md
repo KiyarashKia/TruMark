@@ -133,6 +133,14 @@ npm run verify -- <deployed-contract-address>
 This executes `npx hardhat verify` and publishes the contract to the configured
 block explorer.
 
+Before running Hardhat tasks, create a `.env` file with your RPC endpoints and
+API keys:
+
+```bash
+cp .env.example .env
+# then fill in SEPOLIA_URL, AMOY_URL, PRIVATE_KEY and explorer API keys
+```
+
 ## 🧑‍🎨 Credits
 - 👨‍💻 Development: Kiarash Kia + Upayan Chatterjee + Copilot AI Assistant
 - 🎨 UI/UX Design: Kiarash Kia
