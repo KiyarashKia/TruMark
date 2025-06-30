@@ -4,14 +4,16 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "verify": "npx hardhat verify"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
-    "hardhat": "^2.25.0"
+    "hardhat": "^2.25.0",
+    "@nomicfoundation/hardhat-verify": "^2.4.0"
   },
   "dependencies": {
     "alchemy-sdk": "^3.5.3",

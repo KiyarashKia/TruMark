@@ -122,6 +122,17 @@ The onboarding flow in **TruMark** isn't just a UI layer — it's a **frictionle
 
 ---
 
+## 🔄 Contract Verification
+After deploying the `TruMark` smart contract, verify the source on your target
+network using Hardhat:
+
+```bash
+npm run verify -- <deployed-contract-address>
+```
+
+This executes `npx hardhat verify` and publishes the contract to the configured
+block explorer.
+
 ## 🧑‍🎨 Credits
 - 👨‍💻 Development: Kiarash Kia + Upayan Chatterjee + Copilot AI Assistant
 - 🎨 UI/UX Design: Kiarash Kia
