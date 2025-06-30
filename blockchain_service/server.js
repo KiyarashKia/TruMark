@@ -46,7 +46,7 @@ app.post('/blockchain/register', async (req, res) => {
     await new Promise((resolve) => setTimeout(resolve, 1000)); // simulate delay
 
     return res.json({
-      success: res.statusCode === 200 ? "Success" : "Failure",
+      success: res.statusCode === 200,
       contractAddress: "0xDEADBEEFDEADBEEFDEADBEEFDEADBEEFDEADBEEF",
       transactionHash: "0xFAKETXNFAKETXNFAKETXNFAKETXNFAKETXNFAKETXN"
     });
