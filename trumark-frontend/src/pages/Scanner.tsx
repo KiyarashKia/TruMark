@@ -93,46 +93,51 @@ export default function Scanner() {
   };
 
   useEffect(() => {
-    let cancelled = false;
     const reader = new BrowserMultiFormatReader(buildHints(), {
       delayBetweenScanAttempts: 100,
       delayBetweenScanSuccess: 1000,
     });
-    const video = videoRef.current;
-    if (!video) return;
+    let cancelled = false;
 
-    reader
-      .decodeFromConstraints(
-        {
-          video: {
-            facingMode: { ideal: "environment" },
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
+    // Acquire the camera ONCE. Deferring to a macrotask lets React StrictMode's
+    // dev-only mount → unmount → mount cancel this first attempt before
+    // getUserMedia ever runs — otherwise two readers acquire the same camera
+    // and share one <video>, and the cancelled reader's stop() clears the
+    // srcObject of the live stream, leaving a black camera after permission.
+    const startTimer = setTimeout(async () => {
+      const video = videoRef.current;
+      if (!video || cancelled) return;
+      try {
+        const controls = await reader.decodeFromConstraints(
+          {
+            video: {
+              facingMode: { ideal: "environment" },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
           },
-        },
-        video,
-        (result, _err, controls) => {
-          if (!controlsRef.current && controls) controlsRef.current = controls;
-          if (result) goToProduct(result.getText());
-        },
-      )
-      .then((controls) => {
+          video,
+          (result) => {
+            if (result) goToProduct(result.getText());
+          },
+        );
         if (cancelled) {
           controls.stop();
           return;
         }
         controlsRef.current = controls;
         setScanState("scanning");
-      })
-      .catch((err) => {
+      } catch (err) {
         if (cancelled) return;
         // No camera, denied permission, or insecure context (non-HTTPS).
         console.error("Scanner start failed:", err);
         setScanState("denied");
-      });
+      }
+    }, 0);
 
     return () => {
       cancelled = true;
+      clearTimeout(startTimer);
       stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
