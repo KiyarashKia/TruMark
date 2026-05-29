@@ -32,7 +32,7 @@
 | Product Details Screen    | ✅ Done       | Safety verdict, recall surface, supply-chain trace |
 | Blockchain Verification   | ✅ Done       | On-chain trust screen (contract/tx refs + journey); reads simulated, real read-ready |
 | Product Data Lookup       | ✅ Done       | Live product identity from Open Food Facts |
-| Government Recall Sync    | ⚠️ Mocked     | Mock registry today; CFIA/Health Canada feed is the integration target |
+| Government Recall Sync    | ✅ Live        | UPC-keyed lookup against Health Canada / CFIA (`recall_service`); mock fallback offline |
 | Camera-Denied Recovery    | ✅ Done       | Permission fallback with manual barcode entry |
 | PWA Manifest & Offline    | ⏳ Planned    | Service Worker and Add-to-Home functionality |
 | Authentication            | ⏳ Planned    | Google OAuth for advanced access |
@@ -134,7 +134,7 @@ TruMark is a **scan → verify → trust** flow over three layers:
 | Layer | What it does | Where |
 |-------|--------------|-------|
 | **Product identity** | Resolves a barcode to a real product | `src/lib/openFoodFacts.ts` (Open Food Facts) |
-| **Safety** | Active recalls for that product | `src/lib/recalls.ts` (mocked; CFIA/Health Canada is the target) |
+| **Safety** | Active recalls for that product | `src/lib/recalls.ts` → `recall_service` (Health Canada / CFIA, UPC-keyed) |
 | **Provenance** | On-chain supply-chain record | `src/lib/chain.ts` → `blockchain_service` → `TruMark.sol` registry |
 
 `src/lib/report.ts` fans these out in parallel and computes a single **verdict**
@@ -151,10 +151,16 @@ one-contract-per-product deployment. Writes are owner-gated; reads are public.
 colors, spacing, radii, elevation) plus component recipes. Screens consume
 tokens, never raw hex.
 
+**Recall module** — `recall_service` wraps Health Canada/CFIA: it builds a UPC →
+recall index (open-data list + parsing the UPC table off each public recall
+page, since the gov API has no UPC index) and serves
+`GET /api/v1/recalls?upc=&weeks=`. See [recall_service/README.md](recall_service/README.md).
+
 ### Environment
 
 - **Frontend** (`trumark-frontend/.env.example`): `VITE_CHAIN_API_URL`,
-  `VITE_SIMULATE_CHAIN` (defaults to simulation — safe for demos).
+  `VITE_SIMULATE_CHAIN` (defaults to simulation — safe for demos),
+  `VITE_RECALL_API_URL` (recall service; mock fallback when unset).
 - **Service** (`blockchain_service`): `SIMULATE` (defaults ON; only `"false"`
   goes live), `CONTRACT_ADDRESS`, `ALCHEMY_API_URL`, `PRIVATE_KEY`, optional
   `REGISTER_API_KEY` to gate the register endpoint.

@@ -1,0 +1,15 @@
+{
+  "name": "trumark-recall-service",
+  "version": "1.0.0",
+  "description": "TruMark recall-checking module. Wraps the Health Canada / CFIA recalls API and exposes a clean, UPC-keyed lookup.",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  }
+}
