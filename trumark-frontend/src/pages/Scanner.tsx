@@ -25,23 +25,38 @@ import {
   FiCamera,
   FiChevronRight,
 } from "react-icons/fi";
-import * as Quagga from "quagga";
-import type { QuaggaResult } from "quagga";
+import { BrowserMultiFormatReader } from "@zxing/browser";
+import { DecodeHintType, BarcodeFormat } from "@zxing/library";
 import { useScanHistory } from "../lib/history";
 
 interface TorchConstraint extends MediaTrackConstraintSet {
   torch?: boolean;
 }
 
+/** Minimal shape we use from zxing's IScannerControls (avoids a deep import). */
+interface ScannerControls {
+  stop: () => void;
+}
+
 const SCAN_WIDTH = 320;
 const SCAN_HEIGHT = 200;
-const READERS = [
-  "ean_reader",
-  "ean_8_reader",
-  "upc_reader",
-  "upc_e_reader",
-  "code_128_reader",
-] as const;
+
+// Restrict to the 1D retail formats we care about. Fewer formats = faster,
+// more accurate decoding (the engine isn't also hunting QR/Data Matrix/etc).
+const FORMATS = [
+  BarcodeFormat.EAN_13,
+  BarcodeFormat.EAN_8,
+  BarcodeFormat.UPC_A,
+  BarcodeFormat.UPC_E,
+  BarcodeFormat.CODE_128,
+];
+
+function buildHints(): Map<DecodeHintType, unknown> {
+  const hints = new Map<DecodeHintType, unknown>();
+  hints.set(DecodeHintType.POSSIBLE_FORMATS, FORMATS);
+  hints.set(DecodeHintType.TRY_HARDER, true); // favor accuracy over raw speed
+  return hints;
+}
 
 type ScanState = "initializing" | "scanning" | "denied";
 
@@ -55,116 +70,99 @@ export default function Scanner() {
   const [flashlight, setFlashlight] = useState(false);
   const [manualCode, setManualCode] = useState("");
 
-  // Refs avoid stale closures and double-handling under StrictMode remounts.
-  const handledRef = useRef(false);
-  const startedRef = useRef(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const controlsRef = useRef<ScannerControls | null>(null);
+  const handledRef = useRef(false); // guards against double navigation / StrictMode
 
-  const goToProduct = (code: string) => {
-    if (handledRef.current) return;
-    handledRef.current = true;
-    add(code);
+  const stopCamera = () => {
     try {
-      Quagga.stop();
+      controlsRef.current?.stop();
     } catch {
       /* already stopped */
     }
-    navigate(`/product/${encodeURIComponent(code)}`);
+    controlsRef.current = null;
+  };
+
+  const goToProduct = (code: string) => {
+    const trimmed = code.trim();
+    if (!trimmed || handledRef.current) return;
+    handledRef.current = true;
+    add(trimmed);
+    stopCamera();
+    navigate(`/product/${encodeURIComponent(trimmed)}`);
   };
 
   useEffect(() => {
     let cancelled = false;
+    const reader = new BrowserMultiFormatReader(buildHints(), {
+      delayBetweenScanAttempts: 100,
+      delayBetweenScanSuccess: 1000,
+    });
+    const video = videoRef.current;
+    if (!video) return;
 
-    const onDetected = (data: QuaggaResult) => {
-      const code = data?.codeResult?.code;
-      if (code) goToProduct(code);
-    };
-
-    Quagga.init(
-      {
-        inputStream: {
-          name: "Live",
-          type: "LiveStream",
-          target: document.querySelector("#scanner-container") as HTMLElement,
-          constraints: {
-            facingMode: "environment",
+    reader
+      .decodeFromConstraints(
+        {
+          video: {
+            facingMode: { ideal: "environment" },
             width: { ideal: 1280 },
             height: { ideal: 720 },
           },
         },
-        decoder: { readers: [...READERS] },
-        locate: true,
-        frequency: 5,
-        numOfWorkers: 2,
-        halfSample: false,
-        patchSize: "medium",
-      },
-      (err: unknown) => {
-        if (cancelled) return;
-        if (err) {
-          // Almost always a denied/unavailable camera. Show a real recovery screen.
-          console.error("Quagga init failed:", err);
-          setScanState("denied");
+        video,
+        (result, _err, controls) => {
+          if (!controlsRef.current && controls) controlsRef.current = controls;
+          if (result) goToProduct(result.getText());
+        },
+      )
+      .then((controls) => {
+        if (cancelled) {
+          controls.stop();
           return;
         }
-        startedRef.current = true;
-        Quagga.start();
+        controlsRef.current = controls;
         setScanState("scanning");
-      },
-    );
-
-    Quagga.onDetected(onDetected);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        // No camera, denied permission, or insecure context (non-HTTPS).
+        console.error("Scanner start failed:", err);
+        setScanState("denied");
+      });
 
     return () => {
       cancelled = true;
-      // Pass the SAME handler reference so it actually unregisters (the old
-      // code passed a fresh fn and leaked the camera + decoder).
-      Quagga.offDetected(onDetected);
-      if (startedRef.current) {
-        try {
-          Quagga.stop();
-        } catch {
-          /* noop */
-        }
-      }
+      stopCamera();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    event.target.value = ""; // allow re-selecting the same file
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const src = e.target?.result;
-      if (!src) return;
-      Quagga.decodeSingle(
-        {
-          inputStream: { size: 800, singleChannel: false, src: src.toString() },
-          decoder: { readers: [...READERS] },
-        },
-        (result: QuaggaResult | null) => {
-          if (result?.codeResult?.code) {
-            goToProduct(result.codeResult.code);
-          } else {
-            toast({
-              title: "No barcode found",
-              description: "Try a clearer, well-lit photo of the barcode.",
-              status: "warning",
-              duration: 3000,
-              position: "top",
-            });
-          }
-        },
-      );
-    };
-    reader.readAsDataURL(file);
-    // Allow re-selecting the same file.
-    event.target.value = "";
+
+    const url = URL.createObjectURL(file);
+    try {
+      const reader = new BrowserMultiFormatReader(buildHints());
+      const result = await reader.decodeFromImageUrl(url);
+      goToProduct(result.getText());
+    } catch {
+      toast({
+        title: "No barcode found",
+        description: "Try a clearer, well-lit photo of the barcode.",
+        status: "warning",
+        duration: 3000,
+        position: "top",
+      });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   };
 
   const toggleFlashlight = async () => {
-    const video = document.querySelector("#scanner-container video") as HTMLVideoElement | null;
-    const stream = video?.srcObject as MediaStream | undefined;
+    const stream = videoRef.current?.srcObject as MediaStream | undefined;
     const track = stream?.getVideoTracks()[0];
     if (!track) return;
 
@@ -207,8 +205,20 @@ export default function Scanner() {
 
   return (
     <Box position="relative" w="100vw" h="100dvh" bg="black" overflow="hidden">
-      {/* Camera feed */}
-      <Box id="scanner-container" position="absolute" inset={0} zIndex={0} />
+      {/* Camera feed (zxing attaches the MediaStream to this element) */}
+      <video
+        ref={videoRef}
+        muted
+        playsInline
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          zIndex: 0,
+        }}
+      />
 
       {/* Dimming overlays above/below the scan window */}
       <Box

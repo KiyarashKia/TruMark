@@ -27,12 +27,12 @@
 | Feature                   | Status       | Description |
 |---------------------------|--------------|-------------|
 | Onboarding Flow           | ✅ Done       | Pixel-perfect, animated screens with spacing fidelity |
-| Barcode Scanning          | ✅ Done       | Live mobile scanning, auto-routes to product on detect |
+| Barcode Scanning          | ✅ Done       | ZXing engine (EAN/UPC/Code-128, TRY_HARDER), auto-routes to product on detect |
 | Upload from Gallery       | ✅ Done       | Decode barcodes from uploaded images |
 | Product Details Screen    | ✅ Done       | Safety verdict, recall surface, supply-chain trace |
 | Blockchain Verification   | ✅ Done       | On-chain trust screen (contract/tx refs + journey); reads simulated, real read-ready |
 | Product Data Lookup       | ✅ Done       | Live product identity from Open Food Facts |
-| Government Recall Sync    | ✅ Live        | UPC-keyed lookup against Health Canada / CFIA (`recall_service`); mock fallback offline |
+| Government Recall Sync    | ✅ Live        | UPC-keyed lookup against Health Canada / CFIA (`recall_service`), re-validated against the live recall page per scan; mock fallback offline |
 | Camera-Denied Recovery    | ✅ Done       | Permission fallback with manual barcode entry |
 | PWA Manifest & Offline    | ⏳ Planned    | Service Worker and Add-to-Home functionality |
 | Authentication            | ⏳ Planned    | Google OAuth for advanced access |

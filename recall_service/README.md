@@ -29,6 +29,17 @@ open-data JSON  ──►  filter Organization = "CFIA" (food), recent window
 The legacy `healthycanadians.gc.ca/.../api/{id}` JSON endpoint is a **frozen
 2021 archive** and is intentionally not used.
 
+### Per-scan live re-validation
+
+The index makes matching fast, but every scan also **re-fetches the matched
+recall's current page** (cached `LIVE_TTL_MS`, default 5 min) to confirm the UPC
+is still listed there — so a result always reflects the live page, not just the
+last index snapshot. If a scan arrives while the index is older than `STALE_MS`
+(default 15 min), a background refresh is triggered so newly published recalls
+surface quickly. Responses are `Cache-Control: no-store` and carry
+`meta.liveChecked: true`. A live-fetch failure falls back to the indexed result
+rather than hiding a possible recall.
+
 ## API
 
 ### `GET /api/v1/recalls?upc=<barcode>&weeks=<n>`
@@ -70,7 +81,9 @@ npm start            # http://localhost:3002
 | `PORT` | `3002` | listen port |
 | `INDEX_WEEKS` | `26` | how far back to index |
 | `MAX_DETAILS` | `120` | cap recall pages parsed per refresh |
-| `REFRESH_MS` | `3600000` | index refresh interval |
+| `REFRESH_MS` | `1800000` | background index refresh interval (30 min) |
+| `STALE_MS` | `900000` | trigger a refresh on query if index older (15 min) |
+| `LIVE_TTL_MS` | `300000` | per-scan live page re-check cache (5 min) |
 
 ## UPC matching
 

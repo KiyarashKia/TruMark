@@ -24,7 +24,9 @@ const { fetchRecentFoodRecalls, fetchRecallUpcs } = require("./healthCanada");
  */
 
 const PORT = process.env.PORT || 3002;
-const REFRESH_MS = Number(process.env.REFRESH_MS || 60 * 60 * 1000); // 1h
+const REFRESH_MS = Number(process.env.REFRESH_MS || 30 * 60 * 1000); // 30m background refresh
+const STALE_MS = Number(process.env.STALE_MS || 15 * 60 * 1000); // trigger refresh if index older
+const LIVE_TTL_MS = Number(process.env.LIVE_TTL_MS || 5 * 60 * 1000); // live page re-check cache
 const INDEX_WEEKS = Number(process.env.INDEX_WEEKS || 26); // how far back to index
 const MAX_DETAILS = Number(process.env.MAX_DETAILS || 120); // bound work per refresh
 const DETAIL_CONCURRENCY = 4;
@@ -38,6 +40,10 @@ const store = {
   indexedAt: null, // Date | null
   refreshing: false,
 };
+
+// Short-lived cache of live page fetches, so a scan re-confirms against the
+// CURRENT recall page without hammering the gov site on repeat scans.
+const liveCache = new Map(); // recallId -> { upcs, fetchedAt }
 
 function weeksAgoMs(weeks) {
   return Date.now() - weeks * 7 * 24 * 60 * 60 * 1000;
@@ -105,16 +111,49 @@ async function refreshIndex() {
   }
 }
 
-function lookup(upc, weeks) {
+/** Fetch a recall's UPCs from its current page, cached for LIVE_TTL_MS. */
+async function liveUpcs(recall) {
+  const cached = liveCache.get(recall.recallId);
+  if (cached && Date.now() - cached.fetchedAt < LIVE_TTL_MS) return cached.upcs;
+  const upcs = await fetchRecallUpcs(recall.url);
+  liveCache.set(recall.recallId, { upcs, fetchedAt: Date.now() });
+  return upcs;
+}
+
+/**
+ * Resolve recalls for a UPC. The index gives candidate matches fast; we then
+ * re-fetch each candidate's CURRENT page to confirm the UPC is still listed
+ * (a recall can be corrected or the product removed). On a live-fetch failure
+ * we fall back to the indexed snapshot rather than hide a possible recall.
+ */
+async function lookup(upc, weeks) {
   const cutoff = weeksAgoMs(weeks);
   const ids = new Set();
   for (const key of upcKeys(upc)) {
     const matches = store.byUpc.get(key);
     if (matches) for (const id of matches) ids.add(id);
   }
-  return [...ids]
+
+  const candidates = [...ids]
     .map((id) => store.byId.get(id))
-    .filter((r) => r && new Date(r.date).getTime() >= cutoff)
+    .filter((r) => r && new Date(r.date).getTime() >= cutoff);
+
+  const confirmed = await Promise.all(
+    candidates.map(async (r) => {
+      try {
+        const current = await liveUpcs(r);
+        const stillListed = current.some((u) =>
+          [...upcKeys(u)].some((k) => upcKeys(upc).has(k)),
+        );
+        return stillListed ? r : null;
+      } catch {
+        return r; // live check failed — keep the indexed result, don't suppress
+      }
+    }),
+  );
+
+  return confirmed
+    .filter(Boolean)
     .map(toPublic)
     .sort((a, b) => b.date.localeCompare(a.date));
 }
@@ -170,7 +209,7 @@ app.get("/healthz", (_req, res) => {
   });
 });
 
-app.get("/api/v1/recalls", rateLimit, (req, res) => {
+app.get("/api/v1/recalls", rateLimit, async (req, res) => {
   const upc = String(req.query.upc || "").trim();
   if (!upc || upcKeys(upc).size === 0) {
     return res.status(400).json({
@@ -185,20 +224,33 @@ app.get("/api/v1/recalls", rateLimit, (req, res) => {
     });
   }
 
+  // Keep discovery current: if the index is stale, refresh in the background so
+  // newly published recalls get picked up (doesn't block this response).
+  if (Date.now() - store.indexedAt.getTime() > STALE_MS) refreshIndex();
+
   let weeks = Number(req.query.weeks) || DEFAULT_WEEKS;
   weeks = Math.min(Math.max(1, weeks), MAX_WEEKS);
 
-  const data = lookup(upc, weeks);
-  res.set("Cache-Control", "public, max-age=300");
-  res.json({
-    data,
-    meta: {
-      upc,
-      matched: data.length > 0,
-      weeks,
-      indexedAt: store.indexedAt,
-    },
-  });
+  try {
+    const data = await lookup(upc, weeks);
+    // No shared caching: each result is live-validated per scan.
+    res.set("Cache-Control", "no-store");
+    res.json({
+      data,
+      meta: {
+        upc,
+        matched: data.length > 0,
+        weeks,
+        liveChecked: true,
+        indexedAt: store.indexedAt,
+      },
+    });
+  } catch (err) {
+    console.error("lookup failed:", err.message);
+    res.status(502).json({
+      error: { code: "upstream_error", message: "Recall source is temporarily unavailable." },
+    });
+  }
 });
 
 app.get("/api/v1/recalls/:id", rateLimit, (req, res) => {
