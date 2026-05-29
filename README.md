@@ -27,15 +27,18 @@
 | Feature                   | Status       | Description |
 |---------------------------|--------------|-------------|
 | Onboarding Flow           | ✅ Done       | Pixel-perfect, animated screens with spacing fidelity |
-| Barcode Scanning          | ✅ Done       | Live mobile scanning with red scan line + flashlight toggle |
-| Upload from Gallery       | ✅ Done       | Decode barcodes from uploaded images (drag/drop or select) |
-| Blockchain Verification   | ✅ Done       | Polygon contract read for verification |
-| Government Recall Sync    | ⏳ Planned    | Will pull from Canada Health database |
+| Barcode Scanning          | ✅ Done       | Live mobile scanning, auto-routes to product on detect |
+| Upload from Gallery       | ✅ Done       | Decode barcodes from uploaded images |
+| Product Details Screen    | ✅ Done       | Safety verdict, recall surface, supply-chain trace |
+| Blockchain Verification   | ✅ Done       | On-chain trust screen (contract/tx refs + journey); reads simulated, real read-ready |
+| Product Data Lookup       | ✅ Done       | Live product identity from Open Food Facts |
+| Government Recall Sync    | ⚠️ Mocked     | Mock registry today; CFIA/Health Canada feed is the integration target |
+| Camera-Denied Recovery    | ✅ Done       | Permission fallback with manual barcode entry |
 | PWA Manifest & Offline    | ⏳ Planned    | Service Worker and Add-to-Home functionality |
-| Authentication            | ⏳ In Progress| Google OAuth for advanced access |
-| View Scan History         | ✅ Done       | Locally tracked codes for UX |
-| Mobile-Only Support       | ✅ Done       | Fully restricted to phones/tablets, scroll/zoom lock |
-| iOS Safe Area Support     | ✅ Done       | Env-aware spacing below elements (notch/footer) |
+| Authentication            | ⏳ Planned    | Google OAuth for advanced access |
+| View Scan History         | ✅ Done       | localStorage-backed history drawer |
+| Mobile-Only Support       | ✅ Done       | Phone/tablet only; desktop shows an "open on your phone" gate |
+| iOS Safe Area Support     | ✅ Done       | Env-aware spacing (notch/footer/home indicator) |
 
 ---
 
@@ -49,8 +52,10 @@
 | Styling    | CSS Variables + Design Tokens   |
 | Fonts      | SF Pro Display, SF Pro          |
 | Routing    | React Router DOM                |
-| Chain      | Polygon Blockchain              |
-| Auth       | Google OAuth                    |
+| Chain      | Polygon (Amoy) registry contract|
+| Product DB | Open Food Facts API             |
+| Recalls    | Mock (CFIA/Health Canada target)|
+| Auth       | Google OAuth (planned)          |
 | UI/UX      | Figma - Notion - Ps             |
 
 ---
@@ -122,8 +127,48 @@ The onboarding flow in **TruMark** isn't just a UI layer — it's a **frictionle
 
 ---
 
+## 🧱 Architecture (current build)
+
+TruMark is a **scan → verify → trust** flow over three layers:
+
+| Layer | What it does | Where |
+|-------|--------------|-------|
+| **Product identity** | Resolves a barcode to a real product | `src/lib/openFoodFacts.ts` (Open Food Facts) |
+| **Safety** | Active recalls for that product | `src/lib/recalls.ts` (mocked; CFIA/Health Canada is the target) |
+| **Provenance** | On-chain supply-chain record | `src/lib/chain.ts` → `blockchain_service` → `TruMark.sol` registry |
+
+`src/lib/report.ts` fans these out in parallel and computes a single **verdict**
+(`safe` / `caution` / `recalled`) that drives all status color in the UI.
+
+**Smart contract** — `TruMark.sol` is now a **single long-lived registry** keyed
+by UPC (`registerProduct` / `getProduct` / `isRegistered`), not a
+one-contract-per-product deployment. Writes are owner-gated; reads are public.
+
+**Routes** — `/` onboarding · `/scanner` · `/product/:upc` · `/verification/:upc`
+(result screens are deep-linkable by barcode).
+
+**Design system** — TruKit lives in `src/theme.ts` as semantic tokens (status
+colors, spacing, radii, elevation) plus component recipes. Screens consume
+tokens, never raw hex.
+
+### Environment
+
+- **Frontend** (`trumark-frontend/.env.example`): `VITE_CHAIN_API_URL`,
+  `VITE_SIMULATE_CHAIN` (defaults to simulation — safe for demos).
+- **Service** (`blockchain_service`): `SIMULATE` (defaults ON; only `"false"`
+  goes live), `CONTRACT_ADDRESS`, `ALCHEMY_API_URL`, `PRIVATE_KEY`, optional
+  `REGISTER_API_KEY` to gate the register endpoint.
+
+### Demo recall UPCs
+
+Scan or hand-enter these to exercise the safety states:
+`0000000000017` (high-severity recall) · `0000000000024` (allergen recall) ·
+`0000000000031` (unverified on-chain → caution).
+
+---
+
 ## 🔄 Contract Verification
-After deploying the `TruMark` smart contract, verify the source on your target
+After deploying the `TruMark` registry, verify the source on your target
 network using Hardhat:
 
 ```bash

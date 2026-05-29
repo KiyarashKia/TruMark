@@ -1,103 +1,98 @@
-/* 🌟 TruKit Design System V1.0 */
+/* TruKit base layer. Component styling lives in the Chakra theme (theme.ts);
+   this file only handles document-level concerns and the desktop gate. */
+
 @import url('https://fonts.cdnfonts.com/css/sf-pro-display');
 @import url('https://fonts.cdnfonts.com/css/sf-ui-text-2');
 
 :root {
-  /* 🌟 Typography */
-  font-family: "SF Pro Display", "SF UI Text", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
-    
-  /* 🌟 Colors */
-  --primary-text: #1C1C1C;
-  --secondary-text: #646464;
-  --button-bg: #1C1C1C;
-  --button-text: #FFFFFF;
-  --progress-bar-bg: #E5E5EA;
-  --progress-bar-fill: #000000;
+  font-family: 'SF Pro Display', 'SF UI Text', -apple-system, BlinkMacSystemFont,
+    'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color-scheme: light dark;
 }
 
-/* 🌟 Ensure Body is Correctly Centered */
+* {
+  box-sizing: border-box;
+}
+
+html,
 body {
-  touch-action: none;
   margin: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 320px;
-  min-height: 100vh;
-  background-color: #F3F3F3;
-  color: var(--primary-text);
-  text-align: center;
+  padding: 0;
+  min-height: 100dvh;
 }
 
-/* 🌟 Fix Button Styling */
-.button {
-  width: 168px;
-  height: 53px;
-  border-radius: 32px; /* ✅ Fully Rounded */
-  padding: 8px 28.8px;
-  font-size: 17px;
-  font-weight: 600;
-  font-family: "SF Pro Display", sans-serif;
-  background-color: var(--progress-bar-fill);
-  color: #ffffff; /* ✅ White Text */
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  transition: opacity 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
-  
-  /* 🌟 iOS Button Shadow */
-  box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.16);
-  transform: scale(calc(100vw / 414)); /* Scale based on iPhone 15 Pro Max width */
-  transform-origin: center; /* Scale from the center */
+body {
+  /* Lock the in-app surface: no rubber-band scroll or pinch-zoom over the
+     camera UI. Individual scroll regions opt back in with overflow-y. */
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Hover & Active States */
-.button:hover {
-  opacity: 0.85;
+#root {
+  min-height: 100dvh;
 }
 
-.button:active {
-  opacity: 0.7;
+/* Honor reduced-motion globally as a safety net for any non-Chakra transition. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
-/* 🌟 Fix Progress Bar */
-.progress-container {
-  width: 246px;
-  height: 8px;
-  background-color: var(--progress-bar-bg);
-  border-radius: 999px;
-  overflow: hidden;
+/* ---- Desktop gate -------------------------------------------------------- */
+/* Hidden by default; only shown on viewports too wide for the mobile product. */
+.desktop-gate {
+  display: none;
 }
 
-.progress-bar {
-  height: 100%;
-  width: 33.3%;
-  background-color: var(--progress-bar-fill);
-  transition: 2.4s ease;
-}
-
-/* 🌟 Restrict App to Mobile & Tablets Only */
 @media (min-width: 1025px) {
-  body {
+  #root {
     display: none;
   }
-}
 
-.onboarding-container {
-  /* Default: use min-height for smaller screens */
-  min-height: 805px;
-}
-
-/* Disable vertical responsiveness for height under 810px */
-@media (max-height: 810px) { 
-  .onboarding-container {
-    height: 100vh;
-    min-height: auto; /* or remove it, so there's no conflict */
+  .desktop-gate {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    align-items: center;
+    justify-content: center;
+    background: #f3f3f5;
+    padding: 32px;
   }
-  /* Optionally, adjust buttons to only scale horizontally */
-  .button {
-    transform: scaleX(calc(100vw / 414));
+
+  .desktop-gate__card {
+    max-width: 420px;
+    text-align: center;
+    background: #ffffff;
+    border-radius: 24px;
+    padding: 48px 40px;
+    box-shadow: 0 4px 6px rgba(16, 24, 40, 0.1), 0 2px 4px rgba(16, 24, 40, 0.06);
+  }
+
+  .desktop-gate__mark {
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: #2e6fe0;
+    margin-bottom: 24px;
+  }
+
+  .desktop-gate h1 {
+    font-size: 24px;
+    margin: 0 0 12px;
+    color: #1c1c1c;
+  }
+
+  .desktop-gate p {
+    font-size: 16px;
+    line-height: 1.5;
+    margin: 0;
+    color: #727279;
   }
 }

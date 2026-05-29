@@ -1,40 +1,50 @@
 const { ethers } = require("hardhat");
 const fs = require("fs");
 
+/**
+ * Reads a product from the deployed TruMark registry by UPC and writes it to
+ * contractData.txt.
+ *
+ * Usage:  CONTRACT_ADDRESS=0x... UPC=123456 npx hardhat run fetchData.js --network amoy
+ */
 async function main() {
-    // Define contract address
-    const contractAddress = "0x5C1b8ab1bB0DA255d9D01603D3cDea3edBbdB1E5"; 
+  const contractAddress = process.env.CONTRACT_ADDRESS;
+  const upc = process.env.UPC || "123456";
+  if (!contractAddress) {
+    throw new Error("Set CONTRACT_ADDRESS to the deployed registry address.");
+  }
 
-    // Get the deployed contract
-    const contract = await ethers.getContractAt("TruMark", contractAddress);
+  const contract = await ethers.getContractAt("TruMark", contractAddress);
 
-    // Fetch data from the contract
-    const name = await contract.name();
-    const product = await contract.product();
-    const creator = await contract.creator();
-    const date = await contract.date();
-    
+  if (!(await contract.isRegistered(upc))) {
+    console.log(`No product registered for UPC ${upc}.`);
+    return;
+  }
 
-    // Format the data
-    const data = `
-    Contract Data: ${contractAddress}
-    ---------------------
-    Name: ${name}
-    Product: ${product}
-    By: ${creator}
-    Date: ${date}
-    ---------------------
-    `;
+  const p = await contract.getProduct(upc);
+  const registeredAt = new Date(Number(p.timestamp) * 1000).toISOString();
 
-    // Write data to a text file
-    fs.writeFileSync("contractData.txt", data, "utf8");
+  const data = `
+  Registry: ${contractAddress}
+  ---------------------
+  UPC:        ${p.upc}
+  Role:       ${p.role}
+  Lot:        ${p.lot}
+  Type:       ${p.productType}
+  Date:       ${p.date}
+  Creator:    ${p.creator}
+  Registered: ${registeredAt} by ${p.registeredBy}
+  ---------------------
+  `;
 
-    console.log("✅ Data extracted and saved to contractData.txt!");
+  fs.writeFileSync("contractData.txt", data, "utf8");
+  console.log(data);
+  console.log("Saved to contractData.txt");
 }
 
 main()
-    .then(() => process.exit(0))
-    .catch((error) => {
-        console.error(error);
-        process.exit(1);
-    });
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });

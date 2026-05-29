@@ -3,11 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React + TS</title>
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#F3F3F5" />
+    <meta
+      name="description"
+      content="TruMark — scan any food product and verify its safety, recall status, and blockchain-backed supply chain."
+    />
+    <title>TruMark — Food Transparency, Verified</title>
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Desktop gate: TruMark is a phone/tablet experience. Show a real message
+         instead of a blank screen on wide viewports. -->
+    <div class="desktop-gate" aria-hidden="true">
+      <div class="desktop-gate__card">
+        <div class="desktop-gate__mark">TruMark</div>
+        <h1>Open on your phone</h1>
+        <p>
+          TruMark is built for scanning on the go. Open this page on a phone or
+          tablet to scan and verify a product.
+        </p>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

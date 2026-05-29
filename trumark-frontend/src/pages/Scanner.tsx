@@ -1,220 +1,236 @@
-import React, { useEffect, useState } from "react";
-import { Box, Button, Text, IconButton } from "@chakra-ui/react";
+import React, { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  Box,
+  Button,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
+  Flex,
+  Icon,
+  IconButton,
+  Input,
+  Stack,
+  Text,
+  useDisclosure,
+  useToast,
+} from "@chakra-ui/react";
+import {
+  FiZap,
+  FiClock,
+  FiUploadCloud,
+  FiCamera,
+  FiChevronRight,
+} from "react-icons/fi";
 import * as Quagga from "quagga";
-import { AiOutlineUpload, AiOutlineThunderbolt, AiOutlineHistory } from "react-icons/ai";
+import type { QuaggaResult } from "quagga";
+import { useScanHistory } from "../lib/history";
 
-// Minimal interface for ImageCapture to fix the error
-interface PhotoCapabilities {
-  imageHeight: number;
-  imageWidth: number;
-  fillLightMode: string[];
-  redEyeReduction: boolean;
-  torch: boolean;
-  exposureCompensation: {
-    min: number;
-    max: number;
-    step: number;
-  };
-}
-
-interface ImageCapture {
-  getPhotoCapabilities(): Promise<PhotoCapabilities>;
-}
-
-declare global {
-  interface Window {
-    ImageCapture: {
-      new (track: MediaStreamTrack): ImageCapture;
-    };
-  }
-}
-
-// Declare a TorchConstraint interface locally
 interface TorchConstraint extends MediaTrackConstraintSet {
   torch?: boolean;
 }
 
-const SCAN_WIDTH = 340;
-const SCAN_HEIGHT = 210;
+const SCAN_WIDTH = 320;
+const SCAN_HEIGHT = 200;
+const READERS = [
+  "ean_reader",
+  "ean_8_reader",
+  "upc_reader",
+  "upc_e_reader",
+  "code_128_reader",
+] as const;
 
-const Scanner = () => {
-  const [scannedResult, setScannedResult] = useState<string | null>(null);
+type ScanState = "initializing" | "scanning" | "denied";
+
+export default function Scanner() {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { entries, add, clear } = useScanHistory();
+  const history = useDisclosure();
+
+  const [scanState, setScanState] = useState<ScanState>("initializing");
   const [flashlight, setFlashlight] = useState(false);
-  const [history, setHistory] = useState<string[]>([]);
-  const [showAlert, setShowAlert] = useState(false);
+  const [manualCode, setManualCode] = useState("");
+
+  // Refs avoid stale closures and double-handling under StrictMode remounts.
+  const handledRef = useRef(false);
+  const startedRef = useRef(false);
+
+  const goToProduct = (code: string) => {
+    if (handledRef.current) return;
+    handledRef.current = true;
+    add(code);
+    try {
+      Quagga.stop();
+    } catch {
+      /* already stopped */
+    }
+    navigate(`/product/${encodeURIComponent(code)}`);
+  };
 
   useEffect(() => {
-    const initQuagga = () => {
-      Quagga.init(
-        {
-          inputStream: {
-            name: "Live",
-            type: "LiveStream",
-            target: document.querySelector("#scanner-container") as HTMLElement,
-            constraints: {
-              facingMode: "environment",
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-            },
-          },
-          decoder: {
-            readers: [
-              "ean_reader",
-              "ean_8_reader",
-              "upc_reader",
-              "upc_e_reader",
-              "code_128_reader",
-            ],
-          },
-          // Performance/accuracy enhancements:
-          locate: true,
-          frequency: 5,
-          numOfWorkers: 2,
-          halfSample: false,
-          patchSize: "medium",
-        },
-        (err) => {
-          if (err) {
-            console.error("Quagga init failed:", err);
-            return;
-          }
-          console.log("Quagga initialized");
-          Quagga.start();
-        }
-      );
+    let cancelled = false;
 
-      let lastScanned = "";
-
-      // Duplicating Scans are allowed. Also after detecting a barcode, the scanner should stop, unless user taps rescan.
-      Quagga.onDetected((data) => {
-        const code = data?.codeResult?.code;
-        if (code && code !== lastScanned) {
-          lastScanned = code;
-          setScannedResult(code);
-          setHistory((prev) => [...prev, code]);
-          console.log("Barcode scanned:", code);
-          setShowAlert(true);
-        }
-      });
+    const onDetected = (data: QuaggaResult) => {
+      const code = data?.codeResult?.code;
+      if (code) goToProduct(code);
     };
 
-    initQuagga();
+    Quagga.init(
+      {
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: document.querySelector("#scanner-container") as HTMLElement,
+          constraints: {
+            facingMode: "environment",
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+        },
+        decoder: { readers: [...READERS] },
+        locate: true,
+        frequency: 5,
+        numOfWorkers: 2,
+        halfSample: false,
+        patchSize: "medium",
+      },
+      (err: unknown) => {
+        if (cancelled) return;
+        if (err) {
+          // Almost always a denied/unavailable camera. Show a real recovery screen.
+          console.error("Quagga init failed:", err);
+          setScanState("denied");
+          return;
+        }
+        startedRef.current = true;
+        Quagga.start();
+        setScanState("scanning");
+      },
+    );
+
+    Quagga.onDetected(onDetected);
 
     return () => {
-      Quagga.offDetected(() => {});
-      Quagga.stop();
-    };
-  }, []);
-
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const imageData = e.target?.result;
-      if (imageData) {
-        Quagga.decodeSingle(
-          {
-            inputStream: {
-              size: 800,
-              singleChannel: false,
-              src: imageData.toString(),
-            },
-            decoder: {
-              readers: [
-                "code_128_reader",
-                "ean_reader",
-                "ean_8_reader",
-                "upc_reader",
-                "upc_e_reader",
-              ],
-            },
-          },
-          (result) => {
-            if (result?.codeResult?.code) {
-              setScannedResult(result.codeResult.code);
-              setHistory((prev) => [...prev, result.codeResult.code]);
-              setShowAlert(true);
-            }
-          }
-        );
+      cancelled = true;
+      // Pass the SAME handler reference so it actually unregisters (the old
+      // code passed a fresh fn and leaked the camera + decoder).
+      Quagga.offDetected(onDetected);
+      if (startedRef.current) {
+        try {
+          Quagga.stop();
+        } catch {
+          /* noop */
+        }
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const src = e.target?.result;
+      if (!src) return;
+      Quagga.decodeSingle(
+        {
+          inputStream: { size: 800, singleChannel: false, src: src.toString() },
+          decoder: { readers: [...READERS] },
+        },
+        (result: QuaggaResult | null) => {
+          if (result?.codeResult?.code) {
+            goToProduct(result.codeResult.code);
+          } else {
+            toast({
+              title: "No barcode found",
+              description: "Try a clearer, well-lit photo of the barcode.",
+              status: "warning",
+              duration: 3000,
+              position: "top",
+            });
+          }
+        },
+      );
+    };
     reader.readAsDataURL(file);
+    // Allow re-selecting the same file.
+    event.target.value = "";
   };
 
   const toggleFlashlight = async () => {
+    const video = document.querySelector("#scanner-container video") as HTMLVideoElement | null;
+    const stream = video?.srcObject as MediaStream | undefined;
+    const track = stream?.getVideoTracks()[0];
+    if (!track) return;
+
+    const capabilities = track.getCapabilities?.() ?? {};
+    if (!("torch" in capabilities)) {
+      toast({
+        title: "Flashlight unavailable",
+        description: "This device or browser doesn't support torch control.",
+        status: "info",
+        duration: 3000,
+        position: "top",
+      });
+      return;
+    }
+
+    const next = !flashlight;
     try {
-      // Get the video element created by Quagga.
-      const videoElement = document.querySelector("#scanner-container video") as HTMLVideoElement;
-      if (videoElement && videoElement.srcObject) {
-        const mediaStream = videoElement.srcObject as MediaStream;
-        const track = mediaStream.getVideoTracks()[0];
-        // Check if torch is supported
-        const capabilities = track.getCapabilities();
-        if (!("torch" in capabilities)) {
-          console.warn("Torch is not supported on this device.");
-          return;
-        }
-        const newTorchState = !flashlight;
-        try {
-          await track.applyConstraints({
-            advanced: [{ torch: newTorchState }] as TorchConstraint[],
-          });
-          setFlashlight(newTorchState);
-        } catch (error) {
-          console.error("Failed to toggle torch:", error);
-          // Reset flashlight state if constraint application fails.
-          setFlashlight(false);
-        }
-      } else {
-        console.error("No video element or stream available for flashlight toggle");
-      }
-    } catch (err) {
-      console.error("Error toggling flashlight:", err);
+      await track.applyConstraints({ advanced: [{ torch: next }] as TorchConstraint[] });
+      setFlashlight(next);
+    } catch {
       setFlashlight(false);
+      toast({ title: "Couldn't toggle flashlight", status: "error", duration: 2500, position: "top" });
     }
   };
-  
-  return (
-    <Box position="relative" w="100vw" h="100vh" bg="black" overflow="hidden">
-      {/* Camera feed */}
-      <Box
-        id="scanner-container"
-        position="absolute"
-        top={0}
-        left={0}
-        w="100%"
-        h="100%"
-        zIndex={0}
-      />
 
-      {/* Top Blur Overlay */}
+  const submitManual = () => {
+    const code = manualCode.trim();
+    if (code) goToProduct(code);
+  };
+
+  if (scanState === "denied") {
+    return (
+      <CameraDenied
+        manualCode={manualCode}
+        onManualChange={setManualCode}
+        onManualSubmit={submitManual}
+      />
+    );
+  }
+
+  return (
+    <Box position="relative" w="100vw" h="100dvh" bg="black" overflow="hidden">
+      {/* Camera feed */}
+      <Box id="scanner-container" position="absolute" inset={0} zIndex={0} />
+
+      {/* Dimming overlays above/below the scan window */}
       <Box
         position="absolute"
         top={0}
         left={0}
         w="100%"
-        h={`calc(40% - ${SCAN_HEIGHT / 2}px)`}
-        bg="rgba(0, 0, 0, 0.45)"
-        style={{ backdropFilter: "blur(6px)" }}
+        h={`calc(45% - ${SCAN_HEIGHT / 2}px)`}
+        bg="scrim"
         zIndex={1}
       />
-
-      {/* Bottom Blur Overlay */}
       <Box
         position="absolute"
         bottom={0}
         left={0}
         w="100%"
-        h={`calc(50% - ${SCAN_HEIGHT / 2}px)`}
-        bg="rgba(0, 0, 0, 0.45)"
-        style={{ backdropFilter: "blur(6px)" }}
+        h={`calc(55% - ${SCAN_HEIGHT / 2}px)`}
+        bg="scrim"
         zIndex={1}
       />
 
-      {/* Scan Frame with Red Line & Brackets */}
+      {/* Scan frame */}
       <Box
         position="absolute"
         top="45%"
@@ -225,140 +241,224 @@ const Scanner = () => {
         zIndex={2}
         pointerEvents="none"
       >
-        {/* White Corner Brackets */}
-        {/* Top-left */}
-        <Box position="absolute" top={0} left={0} w="32px" h="4px" bg="white" />
-        <Box position="absolute" top={0} left={0} w="4px" h="32px" bg="white" />
-
-        {/* Top-right */}
-        <Box position="absolute" top={0} right={0} w="32px" h="4px" bg="white" />
-        <Box position="absolute" top={0} right={0} w="4px" h="32px" bg="white" />
-
-        {/* Bottom-left */}
-        <Box position="absolute" bottom={0} left={0} w="32px" h="4px" bg="white" />
-        <Box position="absolute" bottom={0} left={0} w="4px" h="32px" bg="white" />
-
-        {/* Bottom-right */}
-        <Box position="absolute" bottom={0} right={0} w="32px" h="4px" bg="white" />
-        <Box position="absolute" bottom={0} right={0} w="4px" h="32px" bg="white" />
-
-        {/* Red Scan Line */}
+        {(["tl", "tr", "bl", "br"] as const).map((corner) => (
+          <Corner key={corner} pos={corner} />
+        ))}
         <Box
           position="absolute"
           top="50%"
           left={0}
           w="100%"
           h="2px"
-          bg="red.500"
+          bg="danger.400"
           transform="translateY(-1px)"
+          boxShadow="0 0 8px rgba(224,62,62,0.8)"
         />
       </Box>
 
-      {/* Icons: History & Flashlight */}
-      <Box
-        w="full"
+      {/* Top controls */}
+      <Flex
         position="absolute"
-        top="160px"
+        top="max(20px, env(safe-area-inset-top))"
+        left={0}
+        w="full"
+        px="lg"
+        justify="space-between"
         zIndex={4}
-        display="flex"
-        justifyContent="space-between"
-        px="30px"
       >
         <IconButton
-          aria-label="History"
-          icon={<AiOutlineHistory />}
-          onClick={() => console.log(history)}
-          bg="rgba(255,255,255,0.15)"
-          color="white"
-          borderRadius="full"
+          aria-label="Scan history"
+          icon={<FiClock size={20} />}
+          variant="scanner"
+          onClick={history.onOpen}
         />
         <IconButton
-          aria-label="Toggle Flashlight"
-          icon={<AiOutlineThunderbolt />}
+          aria-label={flashlight ? "Turn off flashlight" : "Turn on flashlight"}
+          aria-pressed={flashlight}
+          icon={<FiZap size={20} />}
+          variant={flashlight ? "flashlightOn" : "scanner"}
           onClick={toggleFlashlight}
-          bg={flashlight ? "#C4A938" : "rgba(255,255,255,0.15)"}
-          color={flashlight ? "black" : "white"}
-          borderRadius="full"
-          transition="all 0.2s"
-          _hover={{
-            bg: flashlight ? "#B59B33" : "rgba(255,255,255,0.2)",
-          }}
         />
-      </Box>
+      </Flex>
 
-      {/* Upload From Library Button */}
+      {/* Instruction */}
+      <Text
+        position="absolute"
+        top={`calc(45% - ${SCAN_HEIGHT / 2}px - 36px)`}
+        left="50%"
+        transform="translateX(-50%)"
+        color="whiteAlpha.900"
+        fontSize="sm"
+        fontWeight={500}
+        zIndex={3}
+      >
+        {scanState === "initializing" ? "Starting camera…" : "Point at a barcode"}
+      </Text>
+
+      {/* Upload action */}
       <Box
         position="absolute"
-        top={`calc(50% + ${SCAN_HEIGHT / 2}px + 40px)`}
+        top={`calc(45% + ${SCAN_HEIGHT / 2}px + 32px)`}
         left="50%"
         transform="translateX(-50%)"
         zIndex={3}
       >
-        <Button
-          leftIcon={<AiOutlineUpload />}
-          colorScheme="blue"
-          overflow="hidden"
-          px={6}
-          py={2}
-          borderRadius="full"
-        >
-          <input
+        <Button as="label" htmlFor="upload-input" variant="onDark" leftIcon={<FiUploadCloud />} cursor="pointer">
+          Upload from library
+          <Input
+            id="upload-input"
             type="file"
             accept="image/*"
-            onChange={handleImageUpload}
-            style={{
-              opacity: 0,
-              position: "absolute",
-              width: "100%",
-              height: "100%",
-              top: 0,
-              left: 0,
-              cursor: "pointer",
-            }}
+            onChange={handleUpload}
+            display="none"
           />
-          Upload From Library
         </Button>
       </Box>
 
-      {/* Result Display */}
-      {scannedResult && (
-        <Text
-          position="absolute"
-          bottom="20px"
-          left="50%"
-          transform="translateX(-50%)"
-          fontSize="md"
-          fontWeight="bold"
-          color="white"
-          zIndex={4}
-        >
-          Scanned: {scannedResult}
-        </Text>
-      )}
-
-      {/* Alert */}
-      {showAlert && (
-        <Box
-          position="fixed"
-          top="50%"
-          left="50%"
-          transform="translate(-50%, -50%)"
-          bg="white"
-          p={4}
-          borderRadius="md"
-          boxShadow="lg"
-          zIndex={5}
-        >
-          <Text fontSize="lg" fontWeight="bold">
-            Scanned: {scannedResult}
-          </Text>
-          <Button mt={4} onClick={() => setShowAlert(false)}>
-            Close
-          </Button>
-        </Box>
-      )}
+      <HistoryDrawer
+        isOpen={history.isOpen}
+        onClose={history.onClose}
+        entries={entries}
+        onClear={clear}
+        onSelect={(code) => {
+          history.onClose();
+          navigate(`/product/${encodeURIComponent(code)}`);
+        }}
+      />
     </Box>
   );
-};
+}
 
-export default Scanner;
+function Corner({ pos }: { pos: "tl" | "tr" | "bl" | "br" }) {
+  const v = pos[0] === "t" ? { top: 0 } : { bottom: 0 };
+  const h = pos[1] === "l" ? { left: 0 } : { right: 0 };
+  return (
+    <>
+      <Box position="absolute" {...v} {...h} w="28px" h="3px" bg="white" borderRadius="full" />
+      <Box position="absolute" {...v} {...h} w="3px" h="28px" bg="white" borderRadius="full" />
+    </>
+  );
+}
+
+function CameraDenied({
+  manualCode,
+  onManualChange,
+  onManualSubmit,
+}: {
+  manualCode: string;
+  onManualChange: (v: string) => void;
+  onManualSubmit: () => void;
+}) {
+  return (
+    <Flex
+      direction="column"
+      align="center"
+      justify="center"
+      minH="100dvh"
+      bg="app-bg"
+      px="lg"
+      textAlign="center"
+    >
+      <Icon as={FiCamera} boxSize="36px" color="text-tertiary" mb="md" aria-hidden />
+      <Text fontSize="lg" fontWeight={700}>
+        Camera access needed
+      </Text>
+      <Text fontSize="sm" color="text-secondary" mt="xs" maxW="300px">
+        Allow camera access in your browser settings to scan, or enter a barcode
+        number manually below.
+      </Text>
+
+      <Flex
+        as="form"
+        mt="lg"
+        w="full"
+        maxW="320px"
+        gap="sm"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onManualSubmit();
+        }}
+      >
+        <Input
+          value={manualCode}
+          onChange={(e) => onManualChange(e.target.value)}
+          placeholder="Enter barcode number"
+          inputMode="numeric"
+          bg="surface"
+          aria-label="Barcode number"
+        />
+        <IconButton
+          type="submit"
+          aria-label="Look up barcode"
+          icon={<FiChevronRight />}
+          isDisabled={!manualCode.trim()}
+        />
+      </Flex>
+    </Flex>
+  );
+}
+
+function HistoryDrawer({
+  isOpen,
+  onClose,
+  entries,
+  onClear,
+  onSelect,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  entries: { upc: string; at: number }[];
+  onClear: () => void;
+  onSelect: (code: string) => void;
+}) {
+  return (
+    <Drawer isOpen={isOpen} placement="bottom" onClose={onClose}>
+      <DrawerOverlay bg="scrim" />
+      <DrawerContent
+        bg="surface"
+        borderTopRadius="xl"
+        pb="env(safe-area-inset-bottom)"
+        maxH="70dvh"
+      >
+        <DrawerCloseButton mt="sm" />
+        <DrawerHeader>Scan history</DrawerHeader>
+        <DrawerBody>
+          {entries.length === 0 ? (
+            <Flex direction="column" align="center" py="2xl" color="text-secondary">
+              <Icon as={FiClock} boxSize="28px" mb="sm" aria-hidden />
+              <Text fontSize="sm">No scans yet</Text>
+            </Flex>
+          ) : (
+            <Stack spacing={0} divider={<Box borderBottomWidth="1px" borderColor="border" />}>
+              {entries.map((e) => (
+                <Flex
+                  key={`${e.upc}-${e.at}`}
+                  as="button"
+                  align="center"
+                  justify="space-between"
+                  py="md"
+                  onClick={() => onSelect(e.upc)}
+                  textAlign="left"
+                  _active={{ opacity: 0.6 }}
+                >
+                  <Box>
+                    <Text fontFamily="mono" fontWeight={600}>
+                      {e.upc}
+                    </Text>
+                    <Text fontSize="xs" color="text-tertiary">
+                      {new Date(e.at).toLocaleString("en-CA")}
+                    </Text>
+                  </Box>
+                  <Icon as={FiChevronRight} color="text-tertiary" aria-hidden />
+                </Flex>
+              ))}
+              <Button variant="ghost" mt="md" color="status-danger" onClick={onClear}>
+                Clear history
+              </Button>
+            </Stack>
+          )}
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
+  );
+}
