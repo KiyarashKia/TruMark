@@ -12,6 +12,7 @@ import {
   Text,
 } from "@chakra-ui/react";
 import {
+  FiCheckCircle,
   FiChevronRight,
   FiExternalLink,
   FiImage,
@@ -46,15 +47,15 @@ export default function ProductDetails() {
     >
       {status === "loading" && <LoadingState />}
       {status === "error" && <ErrorState message={error} onRetry={reload} />}
-      {status === "success" && report && <Report report={report} />}
+      {status === "success" && report && <Report report={report} onRetry={reload} />}
     </Screen>
   );
 }
 
 /* ---- Success ------------------------------------------------------------- */
 
-function Report({ report }: { report: ProductReport }) {
-  const { product, recalls, verification } = report;
+function Report({ report, onRetry }: { report: ProductReport; onRetry: () => void }) {
+  const { product, recalls, recallStatus, verification } = report;
   const meta = VERDICT_META[report.verdict];
 
   return (
@@ -107,14 +108,56 @@ function Report({ report }: { report: ProductReport }) {
         </Note>
       )}
 
-      {/* Recalls — only rendered when present; this is a safety surface. */}
-      {recalls.length > 0 && (
+      {/* Recall surface. Three distinct states — never let "couldn't check"
+          masquerade as "no recalls". */}
+      {recallStatus === "unavailable" ? (
+        <Section title="Recall check">
+          <Flex
+            bg="status-caution-bg"
+            borderRadius="md"
+            p="md"
+            align="center"
+            gap="md"
+            borderLeftWidth="3px"
+            borderColor="status-caution"
+          >
+            <Box flex={1}>
+              <Text fontWeight={600} color="status-caution">
+                Recall check unavailable
+              </Text>
+              <Text fontSize="sm" color="text-secondary" mt="xs">
+                We couldn't reach the recall service, so this product hasn't been
+                checked against active recalls.
+              </Text>
+            </Box>
+            <Button
+              size="sm"
+              variant="ghost"
+              leftIcon={<FiRefreshCw />}
+              color="status-caution"
+              onClick={onRetry}
+              flexShrink={0}
+            >
+              Retry
+            </Button>
+          </Flex>
+        </Section>
+      ) : recalls.length > 0 ? (
         <Section title={recalls.length === 1 ? "Active recall" : "Active recalls"}>
           <Stack spacing="sm">
             {recalls.map((r) => (
               <RecallCard key={r.id} recall={r} />
             ))}
           </Stack>
+        </Section>
+      ) : (
+        <Section title="Recall check">
+          <Flex bg="status-safe-bg" borderRadius="md" p="md" align="center" gap="sm">
+            <Icon as={FiCheckCircle} color="status-safe" boxSize="20px" aria-hidden />
+            <Text fontSize="sm" color="text-secondary">
+              No active recalls found for this product.
+            </Text>
+          </Flex>
         </Section>
       )}
 

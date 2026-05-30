@@ -1,9 +1,19 @@
 /** Shared domain types for the TruMark scan → verify → trust flow. */
 
-/** The single trust verdict shown to the consumer. Drives all status color. */
-export type Verdict = "safe" | "caution" | "recalled";
+/**
+ * The single trust verdict shown to the consumer. Drives all status color.
+ * `unknown` is distinct from `safe`: it means the recall check could not be
+ * completed, so we must NOT claim the product is clear.
+ */
+export type Verdict = "safe" | "caution" | "recalled" | "unknown";
 
 export type RecallSeverity = "high" | "medium" | "low";
+
+/** Outcome of a recall lookup — separates "checked, clear" from "couldn't check". */
+export interface RecallCheck {
+  status: "ok" | "unavailable";
+  recalls: Recall[];
+}
 
 export interface Recall {
   id: string;
@@ -53,6 +63,8 @@ export interface ChainVerification {
 export interface ProductReport {
   product: Product;
   recalls: Recall[];
+  /** Whether the recall source could actually be reached for this lookup. */
+  recallStatus: "ok" | "unavailable";
   verification: ChainVerification;
   verdict: Verdict;
 }

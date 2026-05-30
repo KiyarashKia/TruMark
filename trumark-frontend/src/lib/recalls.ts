@@ -1,13 +1,17 @@
-import type { Recall, RecallSeverity } from "./types";
+import type { Recall, RecallCheck, RecallSeverity } from "./types";
 import { fetchWithTimeout } from "./http";
 
 /**
  * Recall lookup.
  *
  * Primary source is the TruMark Recall API (see /recall_service), which wraps
- * Health Canada / CFIA and matches by UPC. If that service isn't configured or
- * is unreachable, we fall back to a small mock registry so the safety flow is
- * still demonstrable offline.
+ * Health Canada / CFIA and matches by UPC.
+ *
+ * Honesty contract for a safety feature:
+ *  - URL configured + success      → { status: "ok", recalls }
+ *  - URL configured + failure      → { status: "unavailable" }  (NEVER silently
+ *    return empty/mock — "couldn't check" must not look like "no recalls")
+ *  - URL NOT configured (demo)     → { status: "ok" } from the mock registry
  *
  * Configure the live service with VITE_RECALL_API_URL.
  */
@@ -51,28 +55,29 @@ const MOCK_RECALLS: Record<string, Recall[]> = {
 export async function fetchRecalls(
   upc: string,
   signal?: AbortSignal,
-): Promise<Recall[]> {
-  if (RECALL_API_URL) {
-    try {
-      // Recall is the safety-critical source, and the service does a live page
-      // re-check per scan, so allow a longer ceiling than product lookup.
-      const res = await fetchWithTimeout(
-        `${RECALL_API_URL}/api/v1/recalls?upc=${encodeURIComponent(upc)}&weeks=${DEFAULT_WEEKS}`,
-        { signal, headers: { Accept: "application/json" } },
-        12000,
-      );
-      if (res.ok) {
-        const body = (await res.json()) as RecallApiResponse;
-        return body.data;
-      }
-      // 4xx/5xx (incl. 503 while the index warms) → fall through to mock.
-    } catch (err) {
-      if ((err as Error).name === "AbortError" && signal?.aborted) throw err;
-      // Timeout / network error → fall through to mock.
-    }
+): Promise<RecallCheck> {
+  // Demo mode: no live service configured → use the mock registry honestly.
+  if (!RECALL_API_URL) {
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    return { status: "ok", recalls: MOCK_RECALLS[upc] ?? [] };
   }
 
-  // Fallback: mock registry (also simulates latency).
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  return MOCK_RECALLS[upc] ?? [];
+  // Live mode: the result reflects the service. A failure is reported as
+  // "unavailable" — we do NOT fall back to mock or empty, because that would
+  // make an unchecked product look safe.
+  try {
+    // Recall is safety-critical and the service does a live page re-check per
+    // scan, so allow a longer ceiling than the product lookup.
+    const res = await fetchWithTimeout(
+      `${RECALL_API_URL}/api/v1/recalls?upc=${encodeURIComponent(upc)}&weeks=${DEFAULT_WEEKS}`,
+      { signal, headers: { Accept: "application/json" } },
+      12000,
+    );
+    if (!res.ok) return { status: "unavailable", recalls: [] }; // incl. 503 warming, 5xx
+    const body = (await res.json()) as RecallApiResponse;
+    return { status: "ok", recalls: body.data };
+  } catch (err) {
+    if ((err as Error).name === "AbortError" && signal?.aborted) throw err;
+    return { status: "unavailable", recalls: [] }; // timeout / connection refused
+  }
 }

@@ -6,12 +6,14 @@ import { verifyOnChain } from "./chain";
 
 /**
  * Verdict rules, in priority order:
- *   1. Any active recall  → recalled (danger). Safety always wins.
- *   2. Not verified on-chain → caution (provenance unknown).
- *   3. Otherwise           → safe.
+ *   1. Any active recall        → recalled (danger). Safety always wins.
+ *   2. Recall check unavailable → unknown. We can't claim it's clear.
+ *   3. Not verified on-chain     → caution (provenance unknown).
+ *   4. Otherwise                 → safe.
  */
 export function computeVerdict(report: Omit<ProductReport, "verdict">): Verdict {
   if (report.recalls.length > 0) return "recalled";
+  if (report.recallStatus === "unavailable") return "unknown";
   if (report.verification.status !== "verified") return "caution";
   return "safe";
 }
@@ -37,14 +39,24 @@ export async function buildReport(
       ? productR.value
       : { upc, name: "Unknown product", found: false };
 
-  const recalls = recallsR.status === "fulfilled" ? recallsR.value : [];
+  // A rejected recall promise (unexpected error) is treated as unavailable, not
+  // as "no recalls" — fail safe, not silent.
+  const recallCheck =
+    recallsR.status === "fulfilled"
+      ? recallsR.value
+      : { status: "unavailable" as const, recalls: [] };
 
   const verification =
     verificationR.status === "fulfilled"
       ? verificationR.value
       : { status: "unverified" as const, network: "Polygon Amoy", trace: [] };
 
-  const partial = { product, recalls, verification };
+  const partial = {
+    product,
+    recalls: recallCheck.recalls,
+    recallStatus: recallCheck.status,
+    verification,
+  };
   return { ...partial, verdict: computeVerdict(partial) };
 }
 

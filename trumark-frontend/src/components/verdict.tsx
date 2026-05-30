@@ -1,5 +1,5 @@
 import type { IconType } from "react-icons";
-import { FiCheckCircle, FiAlertTriangle, FiAlertOctagon } from "react-icons/fi";
+import { FiCheckCircle, FiAlertTriangle, FiAlertOctagon, FiHelpCircle } from "react-icons/fi";
 import type { Verdict } from "../lib/types";
 
 /** Single source of truth mapping a verdict to its copy and status tokens. */
@@ -37,5 +37,14 @@ export const VERDICT_META: Record<Verdict, VerdictMeta> = {
     icon: FiAlertOctagon,
     fg: "status-danger",
     bg: "status-danger-bg",
+  },
+  unknown: {
+    label: "Not checked",
+    headline: "Couldn't check recalls",
+    detail:
+      "The recall service couldn't be reached, so we can't confirm this product is clear. Try again.",
+    icon: FiHelpCircle,
+    fg: "status-caution",
+    bg: "status-caution-bg",
   },
 };
