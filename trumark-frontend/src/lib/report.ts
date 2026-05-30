@@ -20,12 +20,29 @@ export async function buildReport(
   upc: string,
   signal?: AbortSignal,
 ): Promise<ProductReport> {
-  // Independent lookups — run them in parallel.
-  const [product, recalls, verification] = await Promise.all([
+  // Three independent sources. Each is individually timeout-bounded, but we also
+  // isolate them here so one failure can never block the others — the recall
+  // verdict (safety-critical) must render even if product/chain misbehave.
+  const [productR, recallsR, verificationR] = await Promise.allSettled([
     fetchProduct(upc, signal),
     fetchRecalls(upc, signal),
     verifyOnChain(upc, signal),
   ]);
+
+  // If the caller aborted (component unmount), propagate so the hook ignores it.
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+  const product =
+    productR.status === "fulfilled"
+      ? productR.value
+      : { upc, name: "Unknown product", found: false };
+
+  const recalls = recallsR.status === "fulfilled" ? recallsR.value : [];
+
+  const verification =
+    verificationR.status === "fulfilled"
+      ? verificationR.value
+      : { status: "unverified" as const, network: "Polygon Amoy", trace: [] };
 
   const partial = { product, recalls, verification };
   return { ...partial, verdict: computeVerdict(partial) };

@@ -1,4 +1,5 @@
 import type { Recall, RecallSeverity } from "./types";
+import { fetchWithTimeout } from "./http";
 
 /**
  * Recall lookup.
@@ -53,9 +54,12 @@ export async function fetchRecalls(
 ): Promise<Recall[]> {
   if (RECALL_API_URL) {
     try {
-      const res = await fetch(
+      // Recall is the safety-critical source, and the service does a live page
+      // re-check per scan, so allow a longer ceiling than product lookup.
+      const res = await fetchWithTimeout(
         `${RECALL_API_URL}/api/v1/recalls?upc=${encodeURIComponent(upc)}&weeks=${DEFAULT_WEEKS}`,
         { signal, headers: { Accept: "application/json" } },
+        12000,
       );
       if (res.ok) {
         const body = (await res.json()) as RecallApiResponse;
@@ -63,8 +67,8 @@ export async function fetchRecalls(
       }
       // 4xx/5xx (incl. 503 while the index warms) → fall through to mock.
     } catch (err) {
-      if ((err as Error).name === "AbortError") throw err;
-      // Network error → fall through to mock.
+      if ((err as Error).name === "AbortError" && signal?.aborted) throw err;
+      // Timeout / network error → fall through to mock.
     }
   }
 

@@ -1,4 +1,5 @@
 import type { Product } from "./types";
+import { fetchWithTimeout } from "./http";
 
 /**
  * Open Food Facts client — the baseline product source for an MVP.
@@ -41,30 +42,36 @@ export async function fetchProduct(
   upc: string,
   signal?: AbortSignal,
 ): Promise<Product> {
-  const res = await fetch(`${ENDPOINT}/${encodeURIComponent(upc)}.json?fields=${FIELDS}`, {
-    signal,
-    headers: { Accept: "application/json" },
-  });
+  // Product identity is cosmetic context, not safety-critical. A slow or down
+  // Open Food Facts must never block the recall verdict, so we time out fast
+  // and degrade to a "not found" product instead of throwing.
+  try {
+    const res = await fetchWithTimeout(
+      `${ENDPOINT}/${encodeURIComponent(upc)}.json?fields=${FIELDS}`,
+      { signal, headers: { Accept: "application/json" } },
+      6000,
+    );
 
-  if (!res.ok) {
-    throw new Error(`Product lookup failed (${res.status})`);
-  }
+    if (!res.ok) return { upc, name: "Unknown product", found: false };
 
-  const data = (await res.json()) as OffResponse;
+    const data = (await res.json()) as OffResponse;
+    if (data.status !== 1 || !data.product) {
+      return { upc, name: "Unknown product", found: false };
+    }
 
-  if (data.status !== 1 || !data.product) {
+    const p = data.product;
+    return {
+      upc,
+      name: p.product_name?.trim() || "Unnamed product",
+      brand: firstOf(p.brands),
+      imageUrl: p.image_front_url || undefined,
+      category: firstOf(p.categories),
+      origin: firstOf(p.countries),
+      nutriScore: p.nutriscore_grade?.toUpperCase(),
+      found: true,
+    };
+  } catch (err) {
+    if ((err as Error).name === "AbortError" && signal?.aborted) throw err; // real unmount
     return { upc, name: "Unknown product", found: false };
   }
-
-  const p = data.product;
-  return {
-    upc,
-    name: p.product_name?.trim() || "Unnamed product",
-    brand: firstOf(p.brands),
-    imageUrl: p.image_front_url || undefined,
-    category: firstOf(p.categories),
-    origin: firstOf(p.countries),
-    nutriScore: p.nutriscore_grade?.toUpperCase(),
-    found: true,
-  };
 }
