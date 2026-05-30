@@ -261,8 +261,12 @@ app.get("/api/v1/recalls/:id", rateLimit, (req, res) => {
   res.json({ data: toPublic(r) });
 });
 
-app.listen(PORT, () => {
-  console.log(`TruMark recall service on http://localhost:${PORT}`);
+// Bind to 0.0.0.0 (all IPv4 interfaces) so a phone on the same Wi-Fi can reach
+// the service via the PC's LAN IP. Default Node binding lands on IPv6 "::",
+// which on Windows refuses IPv4 connections — that made LAN/phone scans hang.
+const HOST = process.env.HOST || "0.0.0.0";
+app.listen(PORT, HOST, () => {
+  console.log(`TruMark recall service on http://${HOST}:${PORT} (reachable on your LAN IP)`);
   refreshIndex();
   setInterval(refreshIndex, REFRESH_MS);
 });
